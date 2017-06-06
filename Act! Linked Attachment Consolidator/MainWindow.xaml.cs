@@ -11,7 +11,7 @@ namespace Act__Linked_Attachment_Consolidator
         {
             InitializeComponent();
 
-            ActDatabaseErrorHandler.debugMode = true;
+            ActDatabaseMessageHandler.debugMode = true;
 
             startupTasks();
         }
