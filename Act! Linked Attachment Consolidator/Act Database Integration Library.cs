@@ -1,4 +1,4 @@
-﻿using MessageHandler;
+﻿using Message_Handler;
 using System;
 using System.Collections.Generic;
 using System.Data;
@@ -84,7 +84,7 @@ namespace Act_Database_Integration_Library
             }
             catch(Exception error)
             {
-                MessageHandler.handleError(true, error, "Testing connection to ACT7 instance");
+                MessageHandler.handleMessage(true, 3, error, "Testing connection to ACT7 instance failed");
 
                 connectionConfigured = false;
 
@@ -96,7 +96,7 @@ namespace Act_Database_Integration_Library
         {
             if (!connectionConfigured)
             {
-                await ActDatabaseMessageHandler.handleError(true, new Exception(), "Tried running SQL query without configured SQL connection");
+                MessageHandler.handleMessage(false, 3, new Exception(), "Tried running SQL query without configured SQL connection");
 
                 return null;
             }
@@ -106,13 +106,13 @@ namespace Act_Database_Integration_Library
             SqlDataAdapter dataAdaptor = new SqlDataAdapter(command);
             try
             {
-                act7Connection.Open();
+                act7Connection.OpenAsync();
                 dataAdaptor.Fill(queryOutputDataTable);
                 act7Connection.Close();
             }
             catch(Exception error)
             {
-                await ActDatabaseMessageHandler.handleError(true, error, "Running SQL query on ACT7 instance: " + queryString);
+                MessageHandler.handleMessage(false, 3, error, "Running SQL query on ACT7 instance: " + queryString);
             }
             return queryOutputDataTable;
         }

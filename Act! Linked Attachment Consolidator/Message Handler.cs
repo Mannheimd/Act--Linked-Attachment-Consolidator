@@ -1,8 +1,9 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Windows;
 
-namespace MessageHandler
+namespace Message_Handler
 {
     public class MessageHandler
     ///<summary>
@@ -24,59 +25,110 @@ namespace MessageHandler
             get { return _debugMode; }
         }
 
-        private static int _eventViewerLoggingLevel = 2;
+        private static int _eventViewerLoggingLevel = 2; // Defines what level of error will be logged in Event Viewer; defaults to 2 or lower
         public static int eventViewerLoggingLevel
         {
             set { _eventViewerLoggingLevel = value; }
             get { return _eventViewerLoggingLevel; }
         }
 
-        private static int _applicationLogFileLoggingLevel = 4;
+        private static int _applicationLogFileLoggingLevel = 4; // Defines what level of error will be logged in the Application log; defaults to 4 or lower
         public static int applicationLogFileLoggingLevel
         {
             set { _applicationLogFileLoggingLevel = value; }
             get { return _applicationLogFileLoggingLevel; }
         }
 
-        public static async Task handleError(bool isQuiet, Exception error, string context) // Deprecated in favour of HandleMessage, which includes ErrorLevel
+        public static void handleMessage(bool showMessagebox, int messageLevel, Exception error, string context)
         {
-            ///<summary>
-            /// Any errors occurring within Act_Database_Integration_Library should call this function.
-            /// Currently this only creates a messagebox, but will be expanded in future to also log to Event Viewer and possibly an application-specific log file.
-            ///</summary>
+            MessageLevelDefinition messageDef = MessageLevel.level(messageLevel);
 
-            if (!isQuiet || _debugMode)
+            if (messageLevel >= _eventViewerLoggingLevel)
             {
-                MessageBox.Show("An error has occurred.\n\nError context:\n" + context + "\n\nError message:\n" + error.Message, "Act! Database Integration Error");
-            }
-        }
-
-        public static async Task handleMessage(bool showMessagebox, int errorLevel, Exception error, string context)
-        {
-            if (errorLevel >= _eventViewerLoggingLevel)
-            {
-                logEventViewerEvent(errorLevel, error, context);
+                logEventViewerEvent(messageDef, error, context);
             }
 
-            if (errorLevel >= _applicationLogFileLoggingLevel)
+            if (messageLevel >= _applicationLogFileLoggingLevel)
             {
-                logEventViewerEvent(errorLevel, error, context);
+                logEventViewerEvent(messageDef, error, context);
             }
 
             if (showMessagebox || _debugMode)
             {
-                MessageBox.Show("An error has occurred.\n\nError context:\n" + context + "\n\nError message:\n" + error.Message, "Application Error");
+                MessageBox.Show(messageDef.messageBoxIntro + "\n\nContext:\n" + context + "\n\nError message:\n" + error.Message, messageDef.messageBoxTitle);
             }
         }
 
-        private static async void logEventViewerEvent(int errorLevel, Exception error, string context)
+        private static async void logEventViewerEvent(MessageLevelDefinition messageDef, Exception error, string context)
         {
             // Add code for logging an Event Viewer event
         }
 
-        private static async void logApplicationLogFileEntry(int errorLevel, Exception error, string context)
+        private static async void logApplicationLogFileEntry(MessageLevelDefinition messageDef, Exception error, string context)
         {
             // Add code for logging an event in the application's log file
         }
+    }
+
+    public class MessageLevel
+    {
+        private static Dictionary<int, MessageLevelDefinition> _messageLevelDict = new Dictionary<int, MessageLevelDefinition>();
+        public Dictionary<int, MessageLevelDefinition> messageLevelDict
+        {
+            get
+            {
+                if (_messageLevelDict == new Dictionary<int, MessageLevelDefinition>())
+                {
+                    buildDefaultDict();
+                }
+                return _messageLevelDict;
+            }
+        }
+
+        private void buildDefaultDict()
+        {
+            addMessageDefinition(1, "Fatal", "Fatal error", "A fatal error has occurred.");
+            addMessageDefinition(2, "Error", "Application error", "An error has occurred in the application.");
+            addMessageDefinition(3, "Warn", "Warning", "The application has generated a warning alert.");
+            addMessageDefinition(4, "Info", "Information", "Information has been generated");
+            addMessageDefinition(5, "Debug", "Debug alert", "A debug notification was triggered");
+            addMessageDefinition(6, "Trace", "Trace alert", "A trace notification was triggered");
+        }
+
+        public void addMessageDefinition(int levelNumber, string levelName, string messageBoxTitle, string messageBoxIntro)
+        {
+            MessageLevelDefinition levelDef = new MessageLevelDefinition();
+            levelDef.levelName = levelName;
+            levelDef.messageBoxTitle = messageBoxTitle;
+            levelDef.messageBoxIntro = messageBoxIntro;
+
+            if (_messageLevelDict.ContainsKey(levelNumber))
+            {
+                _messageLevelDict[levelNumber] = levelDef;
+            }
+            else
+            {
+                _messageLevelDict.Add(levelNumber, levelDef);
+            }
+        }
+
+        public static MessageLevelDefinition level(int levelNumber)
+        {
+            if (_messageLevelDict.ContainsKey(levelNumber))
+            {
+                return _messageLevelDict[levelNumber];
+            }
+            else
+            {
+                return null;
+            }
+        }
+    }
+
+    public class MessageLevelDefinition
+    {
+        public string levelName { get; set; }
+        public string messageBoxTitle { get; set; }
+        public string messageBoxIntro { get; set; }
     }
 }

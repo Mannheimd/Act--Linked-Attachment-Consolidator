@@ -1,4 +1,5 @@
 ﻿using Act_Database_Integration_Library;
+using Message_Handler;
 using System;
 using System.Collections.Generic;
 using System.Windows;
@@ -11,7 +12,7 @@ namespace Act__Linked_Attachment_Consolidator
         {
             InitializeComponent();
 
-            ActDatabaseMessageHandler.debugMode = true;
+            MessageHandler.debugMode = true;
 
             startupTasks();
         }
