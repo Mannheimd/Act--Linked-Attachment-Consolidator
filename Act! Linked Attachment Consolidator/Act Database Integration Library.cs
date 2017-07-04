@@ -12,19 +12,25 @@ namespace Act_Database_Integration_Library
     {
         public static async Task<List<ActDatabase>> getAllActDatabases()
         {
-            DataTable actDatabasesDataTable = await ActDatabaseConnectionManager.runActSqlQuery("select name from sys.databases where name != 'master' and name != 'model' and name != 'msdb' and name != 'tempdb' and name != 'ActEmailMessageStore'");
-
-            List<ActDatabase> databaseList = new List<ActDatabase>();
-
-            foreach (DataRow row in actDatabasesDataTable.Rows)
+            try
             {
-                ActDatabase database = new ActDatabase();
-                database.name = row["name"].ToString();
+                DataTable actDatabasesDataTable = await ActDatabaseConnectionManager.runActSqlQuery("select name from sys.databases where name != 'master' and name != 'model' and name != 'msdb' and name != 'tempdb' and name != 'ActEmailMessageStore'"); List<ActDatabase> databaseList = new List<ActDatabase>();
 
-                databaseList.Add(database);
+                foreach (DataRow row in actDatabasesDataTable.Rows)
+                {
+                    ActDatabase database = new ActDatabase();
+                    database.name = row["name"].ToString();
+
+                    databaseList.Add(database);
+                }
+
+                return databaseList;
             }
-
-            return databaseList;
+            catch
+            {
+                // Error handled in runActSqlQuery()
+                return null;
+            }
         }
 
         public static async Task<List<ActAttachment>> getAllActAttachments(string databaseName)
@@ -59,7 +65,7 @@ namespace Act_Database_Integration_Library
         private static string act7ConnectionString = null;
         private static bool connectionConfigured = false;
 
-        public static async Task<bool> configureAct7Connection(string hostMachinePath, bool useWindowsAuth, string sqlUser, string sqlPassword)
+        public static bool configureAct7Connection(string hostMachinePath, bool useWindowsAuth, string sqlUser, string sqlPassword)
         {
             if (useWindowsAuth)
             {
@@ -75,7 +81,7 @@ namespace Act_Database_Integration_Library
             try
             {
                 // Test the SQL connection
-                await act7Connection.OpenAsync();
+                act7Connection.Open();
                 act7Connection.Close();
 
                 connectionConfigured = true;
@@ -96,7 +102,7 @@ namespace Act_Database_Integration_Library
         {
             if (!connectionConfigured)
             {
-                MessageHandler.handleMessage(false, 3, new Exception(), "Tried running SQL query without configured SQL connection");
+                MessageHandler.handleMessage(false, 3, null, "Tried running SQL query without configured SQL connection");
 
                 return null;
             }
@@ -106,7 +112,7 @@ namespace Act_Database_Integration_Library
             SqlDataAdapter dataAdaptor = new SqlDataAdapter(command);
             try
             {
-                act7Connection.OpenAsync();
+                await act7Connection.OpenAsync();
                 dataAdaptor.Fill(queryOutputDataTable);
                 act7Connection.Close();
             }

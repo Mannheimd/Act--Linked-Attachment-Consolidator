@@ -1,7 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Threading.Tasks;
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
+using System.Xml;
 
 namespace Message_Handler
 {
@@ -25,32 +27,39 @@ namespace Message_Handler
             get { return _debugMode; }
         }
 
-        private static int _eventViewerLoggingLevel = 2; // Defines what level of error will be logged in Event Viewer; defaults to 2 or lower
+        private static int _eventViewerLoggingLevel = 0; // Defines what level of error will be logged in Event Viewer; defaults to 2 or lower, set to 0 currently to disable function
         public static int eventViewerLoggingLevel
         {
-            set { _eventViewerLoggingLevel = value; }
             get { return _eventViewerLoggingLevel; }
+            set { _eventViewerLoggingLevel = value; }
         }
 
         private static int _applicationLogFileLoggingLevel = 4; // Defines what level of error will be logged in the Application log; defaults to 4 or lower
         public static int applicationLogFileLoggingLevel
         {
-            set { _applicationLogFileLoggingLevel = value; }
             get { return _applicationLogFileLoggingLevel; }
+            set { _applicationLogFileLoggingLevel = value; }
+        }
+
+        private static string _applicationLogFileLocation = null;
+        public static string applicationLogFileLocation
+        {
+            get { return _applicationLogFileLocation; }
+            set { _applicationLogFileLocation = value; }
         }
 
         public static void handleMessage(bool showMessagebox, int messageLevel, Exception error, string context)
         {
             MessageLevelDefinition messageDef = MessageLevel.level(messageLevel);
 
-            if (messageLevel >= _eventViewerLoggingLevel)
+            if (messageLevel <= _eventViewerLoggingLevel)
             {
                 logEventViewerEvent(messageDef, error, context);
             }
 
-            if (messageLevel >= _applicationLogFileLoggingLevel)
+            if (messageLevel <= _applicationLogFileLoggingLevel)
             {
-                logEventViewerEvent(messageDef, error, context);
+                logApplicationLogFileEntry(messageDef, error, context);
             }
 
             if (showMessagebox || _debugMode)
@@ -59,48 +68,139 @@ namespace Message_Handler
             }
         }
 
-        private static async void logEventViewerEvent(MessageLevelDefinition messageDef, Exception error, string context)
+        /// <summary>
+        /// Currently not functional, need an installer to create the Event Viewer source
+        /// Logs an event in the Windows Event Viewer, spawns a message box if this fails
+        /// </summary>
+        /// <param name="messageDef">Definition of the message type</param>
+        /// <param name="error">Exception, if there was one</param>
+        /// <param name="context">Specifies where the error occurred, used for debugging</param>
+        private static void logEventViewerEvent(MessageLevelDefinition messageDef, Exception error, string context)
         {
-            // Add code for logging an Event Viewer event
-        }
+            string eventContent = "Logged at " + DateTime.Now + " (" + DateTime.UtcNow + ") UTC\n\n"
+                + "Error Message: " + error.Message + "\n\n"
+                + "Application error level: " + messageDef.levelName + "\n\n"
+                + "HResult: " + error.HResult + "\n\n"
+                + "Source: " + error.Source + "\n\n"
+                + "TargetSite: " + error.TargetSite + "\n\n"
+                + "Stack Trace:\n" + error.StackTrace;
 
-        private static async void logApplicationLogFileEntry(MessageLevelDefinition messageDef, Exception error, string context)
-        {
-            // Add code for logging an event in the application's log file
-        }
-    }
-
-    public class MessageLevel
-    {
-        private static Dictionary<int, MessageLevelDefinition> _messageLevelDict = new Dictionary<int, MessageLevelDefinition>();
-        public Dictionary<int, MessageLevelDefinition> messageLevelDict
-        {
-            get
+            try
             {
-                if (_messageLevelDict == new Dictionary<int, MessageLevelDefinition>())
+                if (!EventLog.SourceExists(error.Source))
                 {
-                    buildDefaultDict();
+                    EventLog.CreateEventSource(error.Source, "Application");
                 }
-                return _messageLevelDict;
+
+                EventLog.WriteEntry(error.Source, eventContent, messageDef.windowsErrorLevel);
+            }
+            catch(Exception e)
+            {
+                MessageBox.Show("Unable to log event viewer message: " + e.Message + "\n\n" + eventContent);
             }
         }
 
-        private void buildDefaultDict()
+        private static void logApplicationLogFileEntry(MessageLevelDefinition messageDef, Exception error, string context)
         {
-            addMessageDefinition(1, "Fatal", "Fatal error", "A fatal error has occurred.");
-            addMessageDefinition(2, "Error", "Application error", "An error has occurred in the application.");
-            addMessageDefinition(3, "Warn", "Warning", "The application has generated a warning alert.");
-            addMessageDefinition(4, "Info", "Information", "Information has been generated");
-            addMessageDefinition(5, "Debug", "Debug alert", "A debug notification was triggered");
-            addMessageDefinition(6, "Trace", "Trace alert", "A trace notification was triggered");
+            // Confirmt the log file location has been specified
+            if (_applicationLogFileLocation == null)
+            {
+                return;
+            }
+
+            // Create the log file, if it doesn't exist
+            if (!File.Exists(_applicationLogFileLocation))
+            {
+                try
+                {
+                    FileInfo logFileInfo = new FileInfo(_applicationLogFileLocation);
+                    Directory.CreateDirectory(logFileInfo.Directory.FullName);
+
+                    XmlDocument newDoc = new XmlDocument();
+                    newDoc.LoadXml("<logs></logs>");
+
+                    XmlTextWriter xmlWriter = new XmlTextWriter(_applicationLogFileLocation, null);
+                    xmlWriter.Formatting = Formatting.Indented;
+                    newDoc.Save(xmlWriter);
+
+                    xmlWriter.Dispose();
+                }
+                catch(Exception e)
+                {
+                    MessageBox.Show("Unable to create log file in " + _applicationLogFileLocation + "\n\n"
+                        + e.Message);
+                }
+            }
+
+            // Load the Xml document
+            XmlDocument logFile = new XmlDocument();
+            logFile.Load(_applicationLogFileLocation);
+
+            XmlNode rootNode = logFile.SelectSingleNode("logs");
+
+            // Build the log entry
+            XmlNode newNode = logFile.CreateElement("log");
+
+            XmlAttribute utcTimeAttribute = logFile.CreateAttribute("utctime");
+            utcTimeAttribute.Value = DateTime.UtcNow.ToString();
+            newNode.Attributes.Append(utcTimeAttribute);
+
+            XmlAttribute levelAttribute = logFile.CreateAttribute("level");
+            levelAttribute.Value = messageDef.levelName;
+            newNode.Attributes.Append(levelAttribute);
+
+            XmlAttribute contextAttribute = logFile.CreateAttribute("context");
+            contextAttribute.Value = context;
+            newNode.Attributes.Append(contextAttribute);
+
+            newNode.InnerText = error.Message;
+
+            // Append the log entry
+            rootNode.AppendChild(newNode);
+
+            // Save the log file
+            logFile.Save(_applicationLogFileLocation);
+        }
+    }
+
+    /// <summary>
+    /// MessageLevel contains code for defining each error level, along with message box text and Windows event viewer log levels
+    /// </summary>
+    public class MessageLevel
+    {
+        private static Dictionary<int, MessageLevelDefinition> _messageLevelDict = null;
+        public Dictionary<int, MessageLevelDefinition> messageLevelDict
+        {
+            get { return _messageLevelDict; }
         }
 
-        public void addMessageDefinition(int levelNumber, string levelName, string messageBoxTitle, string messageBoxIntro)
+        private static void buildDefaultDict()
         {
+            if (_messageLevelDict == null)
+            {
+                _messageLevelDict = new Dictionary<int, MessageLevelDefinition>();
+            }
+
+            addMessageDefinition(1, "Fatal", "Fatal error", "A fatal error has occurred.", EventLogEntryType.Error);
+            addMessageDefinition(2, "Error", "Application error", "An error has occurred in the application.", EventLogEntryType.Error);
+            addMessageDefinition(3, "Warn", "Warning", "The application has generated a warning alert.", EventLogEntryType.Warning);
+            addMessageDefinition(4, "Info", "Information", "Information has been generated", EventLogEntryType.Information);
+            addMessageDefinition(5, "Debug", "Debug alert", "A debug notification was triggered", EventLogEntryType.Information);
+            addMessageDefinition(6, "Trace", "Trace alert", "A trace notification was triggered", EventLogEntryType.Information);
+        }
+
+        public static void addMessageDefinition(int levelNumber, string levelName, string messageBoxTitle, string messageBoxIntro, EventLogEntryType windowsErrorLevel)
+        {
+            if (_messageLevelDict == null)
+            {
+                buildDefaultDict();
+            }
+
             MessageLevelDefinition levelDef = new MessageLevelDefinition();
             levelDef.levelName = levelName;
             levelDef.messageBoxTitle = messageBoxTitle;
             levelDef.messageBoxIntro = messageBoxIntro;
+            levelDef.windowsErrorLevel = windowsErrorLevel;
 
             if (_messageLevelDict.ContainsKey(levelNumber))
             {
@@ -114,13 +214,24 @@ namespace Message_Handler
 
         public static MessageLevelDefinition level(int levelNumber)
         {
+            if (_messageLevelDict == null)
+            {
+                buildDefaultDict();
+            }
+
             if (_messageLevelDict.ContainsKey(levelNumber))
             {
                 return _messageLevelDict[levelNumber];
             }
             else
             {
-                return null;
+                MessageLevelDefinition unconfiguredErrorMessage = new MessageLevelDefinition();
+                unconfiguredErrorMessage.levelName = "Incorrectly Handled Error";
+                unconfiguredErrorMessage.messageBoxTitle = "Incorrectly Handled Error";
+                unconfiguredErrorMessage.messageBoxIntro = "An incorrectly handled error has occurred. Please report this to the developer, who will need to ensure that the error level number has been added to MessageLevel._messageLevelDict.";
+                unconfiguredErrorMessage.windowsErrorLevel = EventLogEntryType.Warning;
+
+                return unconfiguredErrorMessage;
             }
         }
     }
@@ -130,5 +241,6 @@ namespace Message_Handler
         public string levelName { get; set; }
         public string messageBoxTitle { get; set; }
         public string messageBoxIntro { get; set; }
+        public EventLogEntryType windowsErrorLevel { get; set; }
     }
 }

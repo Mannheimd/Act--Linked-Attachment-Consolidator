@@ -2,6 +2,7 @@
 using Message_Handler;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Windows;
 
 namespace Act__Linked_Attachment_Consolidator
@@ -13,13 +14,14 @@ namespace Act__Linked_Attachment_Consolidator
             InitializeComponent();
 
             MessageHandler.debugMode = true;
+            MessageHandler.applicationLogFileLocation = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData) + @"\Swiftpage Support\Act! Linked Attachment Consolidator\log.xml";
 
             startupTasks();
         }
 
         public async void startupTasks()
         {
-            await ActDatabaseConnectionManager.configureAct7Connection("(local)", true, null, null);
+            ActDatabaseConnectionManager.configureAct7Connection("(local)", true, null, null);
             databaseSelection_ListView.ItemsSource = await ActDatabaseTasks.getAllActDatabases();
         }
 
